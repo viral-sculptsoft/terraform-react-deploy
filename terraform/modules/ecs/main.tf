@@ -47,6 +47,7 @@ resource "aws_ecs_service" "react_app" {
         var.subnet1,
         var.subnet2
     ]
+    assign_public_ip = true
   }
 
   load_balancer {
