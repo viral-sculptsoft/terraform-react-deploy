@@ -2,12 +2,12 @@ name: Build and Push Docker image to ECR
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}                   # set this to your preferred AWS region, e.g. us-west-1
-  ECR_REPOSITORY: "recordrtc-dev-ecr"           # set this to your Amazon ECR repository name
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
   
 permissions:
   contents: read
@@ -37,7 +37,6 @@ jobs:
     - name: Build, tag, and push image to Amazon ECR
       id: build-image
       env:
-        ECR_REGISTRY: "158211228743.dkr.ecr.us-east-1.amazonaws.com"
         IMAGE_TAG: latest
       run: |
         # Build a docker container and
@@ -45,4 +44,16 @@ jobs:
         # be deployed to ECS.
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+        
+    - name: Update ECS service with new image
+      env:
+        SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+        TASK_DEFINITION: ${{ vars.TASK_DEFINITION }}
+        CLUSTER_NAME: ${{ vars.CLUSTER_NAME }}
+      run: |
+        # Get the task definition revision number
+        REVISION=$(aws ecs describe-task-definition --task-definition $TASK_DEFINITION --query 'taskDefinition.revision')
+
+        # Update the ECS service with the new image
+        aws ecs update-service --cluster $CLUSTER_NAME --service $SERVICE_NAME --task-definition $TASK_DEFINITION:$REVISION
